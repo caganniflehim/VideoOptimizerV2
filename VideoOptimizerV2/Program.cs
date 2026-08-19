@@ -164,6 +164,9 @@ namespace VideoOptimizerV2
         private Color lightPanelBg = Color.FromArgb(245, 245, 247);
         private Color lightText = Color.Black;
 
+        private int clickCount = 0;
+        private DateTime lastClickTime;
+
         public MainForm(string[] args = null)
         {
             syncFolderPath = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "Merzigo_Sync");
@@ -466,7 +469,50 @@ namespace VideoOptimizerV2
                 Font = new Font("Segoe UI", 9, FontStyle.Bold),
                 Anchor = AnchorStyles.Bottom | AnchorStyles.Left | AnchorStyles.Right
             };
+            lblStatus.MouseDown += lblStatus_MouseDown; // <-- Buraya ekledik
             this.Controls.Add(lblStatus);
+        }
+
+        private void lblStatus_MouseDown(object sender, MouseEventArgs e)
+        {
+            // Sadece sol tıklama ile ilgileniyoruz
+            if (e.Button != MouseButtons.Left) return;
+
+            // "Durum:" yazısı genelde label'ın en sol başındadır (ilk 45-50 piksel arası).
+            // Farenin X koordinatı 0 ile 50 piksel arasındaysa (yani sol taraftaki "Durum:" yazısına tıklandıysa) tetikle:
+            if (e.X >= 0 && e.X <= 50)
+            {
+                if ((DateTime.Now - lastClickTime).TotalSeconds > 1)
+                {
+                    clickCount = 0;
+                }
+
+                clickCount++;
+                lastClickTime = DateTime.Now;
+
+                if (clickCount == 3)
+                {
+                    ShowDeveloperSignature();
+                    clickCount = 0;
+                }
+            }
+            else
+            {
+                // Sol taraftaki "Durum:" haricinde başka bir yere tıklandıysa sayacı sıfırla
+                clickCount = 0;
+            }
+        }
+
+        private void ShowDeveloperSignature()
+        {
+            string signature = "VideoOptimizer v2.0\n" +
+                               "------------------------------\n" +
+                               "Geliştirici: Ömer Çağan Demirkıran\n" +
+                               "Tarih:06/07/2026  19/08/2026\n" +
+                               "Staj yapılan bir projedir\n" +
+                               "Tüm hakları Ömer Çağan Demirkıran saklıdır.";
+
+            MessageBox.Show(signature, "Sistem Bilgisi", MessageBoxButtons.OK, MessageBoxIcon.Information);
         }
 
         private void mainTabControl_DrawItem(object sender, DrawItemEventArgs e)
