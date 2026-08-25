@@ -54,7 +54,7 @@ namespace VideoOptimizerV2
         protected override void OnPaint(PaintEventArgs e)
         {
             Graphics g = e.Graphics;
-            g.Clear(Color.FromArgb(37, 37, 40)); // Koyu tema arka planı
+            g.Clear(Color.FromArgb(37, 37, 40));
 
             for (int i = 0; i < this.TabPages.Count; i++)
             {
@@ -72,7 +72,7 @@ namespace VideoOptimizerV2
 
                 if (isSelected)
                 {
-                    using (SolidBrush accentBrush = new SolidBrush(Color.FromArgb(0, 120, 212))) // Modern Mavi Vurgu
+                    using (SolidBrush accentBrush = new SolidBrush(Color.FromArgb(0, 120, 212)))
                     {
                         g.FillRectangle(accentBrush, new Rectangle(rect.X, rect.Bottom - 3, rect.Width, 3));
                     }
@@ -100,7 +100,7 @@ namespace VideoOptimizerV2
         private const int THREAD_SUSPEND_RESUME = 0x0002;
 
         // Modern UI Bileşenleri
-        private ModernTabControl mainTabControl; // Özel pürüzsüz sekme kontrolü
+        private ModernTabControl mainTabControl;
         private TabPage tabDashboard;
         private TabPage tabDetailsSettings;
         private Panel pnlLeftQueue;
@@ -135,6 +135,7 @@ namespace VideoOptimizerV2
         private Label lblDetailTarget;
         private Label lblDetailPreset;
         private Label lblDetailSizeInfo;
+        private Label lblDashboardSizeInfo;
 
         private Button btnCopySource;
         private Button btnCopyTarget;
@@ -166,6 +167,12 @@ namespace VideoOptimizerV2
 
         private int clickCount = 0;
         private DateTime lastClickTime;
+
+        // --- KESME BİLEŞENLERİ VE ÇERÇEVE ---
+        private GroupBox grpTrimBox;
+        private TextBox txtTrimStart;
+        private TextBox txtTrimEnd;
+        private Button btnApplyTrim;
 
         public MainForm(string[] args = null)
         {
@@ -229,6 +236,7 @@ namespace VideoOptimizerV2
                 ContextMenuStrip = contextMenuQueue,
                 BackColor = Color.FromArgb(45, 45, 48),
                 ForeColor = Color.White,
+                SelectionMode = SelectionMode.MultiExtended,
                 Anchor = AnchorStyles.Top | AnchorStyles.Bottom | AnchorStyles.Left | AnchorStyles.Right
             };
             lstQueueBox.DrawItem += LstQueueBox_DrawItem;
@@ -263,82 +271,128 @@ namespace VideoOptimizerV2
             {
                 Text = "📁 DOSYALARI SÜRÜKLE & BIRAK\nveya aşağıdaki şeffaf butonlar ile seçin",
                 TextAlign = ContentAlignment.MiddleCenter,
-                Font = new Font("Segoe UI", 12, FontStyle.Bold),
+                Font = new Font("Segoe UI", 11, FontStyle.Bold),
                 Location = new Point(15, 15),
-                Size = new Size(150, 260),
+                Size = new Size(150, 120),
                 BackColor = Color.FromArgb(50, 50, 55),
                 ForeColor = Color.FromArgb(200, 200, 200),
                 Anchor = AnchorStyles.Top | AnchorStyles.Left | AnchorStyles.Right
             };
             tabDashboard.Controls.Add(lblDropZone);
 
-            btnSelectFolder = CreateTransparentButton("📁 Klasör Seç", 15, 290, 120, 38, Color.White);
+            // Dosya/Klasör Seçim Butonları
+            btnSelectFolder = CreateTransparentButton("📁 Klasör Seç", 15, 145, 140, 34, Color.White);
             btnSelectFolder.Click += BtnSelectFolder_Click;
             tabDashboard.Controls.Add(btnSelectFolder);
 
-            btnSelectFiles = CreateTransparentButton("🎬 Video Seç", 145, 290, 120, 38, Color.White);
+            btnSelectFiles = CreateTransparentButton("🎬 Video Seç", 165, 145, 140, 34, Color.White);
             btnSelectFiles.Click += BtnSelectFiles_Click;
             tabDashboard.Controls.Add(btnSelectFiles);
 
-            btnLoadList = CreateTransparentButton("📄 Liste Yükle", 545, 290, 125, 38, Color.White);
-            btnLoadList.Click += BtnLoadList_Click;
-            tabDashboard.Controls.Add(btnLoadList);
-
-            btnSelectTargetFolder = CreateTransparentButton("🎯 Hedef Klasör", 275, 290, 120, 38, Color.White);
+            btnSelectTargetFolder = CreateTransparentButton("🎯 Hedef Klasör", 315, 145, 140, 34, Color.White);
             btnSelectTargetFolder.Click += BtnSelectTargetFolder_Click;
             tabDashboard.Controls.Add(btnSelectTargetFolder);
 
-            btnWatchFolder = CreateTransparentButton("🔍 Klasör İzle", 405, 290, 130, 38, Color.White);
+            btnWatchFolder = CreateTransparentButton("🔍 Klasör İzle", 465, 145, 140, 34, Color.White);
             btnWatchFolder.Click += BtnWatchFolder_Click;
             tabDashboard.Controls.Add(btnWatchFolder);
 
-            cmbPresets = new ComboBox() { Location = new Point(15, 350), Size = new Size(240, 25), DropDownStyle = ComboBoxStyle.DropDownList };
+            btnLoadList = CreateTransparentButton("📄 Liste Yükle", 615, 145, 140, 34, Color.White);
+            btnLoadList.Click += BtnLoadList_Click;
+            tabDashboard.Controls.Add(btnLoadList);
+
+            // Sol tarafta Preset Kutusu
+            cmbPresets = new ComboBox() { Location = new Point(15, 200), Size = new Size(220, 25), DropDownStyle = ComboBoxStyle.DropDownList };
             cmbPresets.Items.AddRange(new string[] {
-                "Yüksek Kalite (HQ - RF/CQ 18)",
-                "Maksimum Kalite (Ultra - RF/CQ 14)",
+                "Yüksek Kalite Orjinal (HQ - RF/CQ 18)",
+                "Dengeli Orijinal (Dengeli - RF/CQ 20)",
+                "Max Kalite Orijinal (Ultra - RF/CQ 14)",
+                "Full HD Sabitle (1920x1080)",
+                "HD Sabitle (1280x720)",
                 "Fast 60 FPS",
                 "Fast 30 FPS"
             });
             cmbPresets.SelectedIndex = 0;
+            cmbPresets.SelectedIndexChanged += (s, e) => {
+                if (lstQueueBox.SelectedItem is QueueItemData data) DisplayItemDetails(data);
+            };
             tabDashboard.Controls.Add(cmbPresets);
 
-            chkSplitAudio = new CheckBox() { Text = "Sesleri .WAV Olarak Ayır", Location = new Point(270, 348), Size = new Size(170, 25), Checked = false, Font = new Font("Segoe UI", 9) };
-            chkSplitAudio.CheckedChanged += (s, e) => { chkSplitAudio.ForeColor = isDarkMode ? darkText : lightText; };
+            // --- "Video Kesme Ayarları" ÇERÇEVESİ ---
+            grpTrimBox = new GroupBox()
+            {
+                Text = "Video Kesme Ayarları",
+                Location = new Point(350, 188),
+                Size = new Size(390, 55),
+                ForeColor = Color.White,
+                Font = new Font("Segoe UI", 9, FontStyle.Bold)
+            };
+            tabDashboard.Controls.Add(grpTrimBox);
+
+            txtTrimStart = new TextBox() { PlaceholderText = "Başlangıç (sn)", Location = new Point(15, 20), Size = new Size(110, 23) };
+            grpTrimBox.Controls.Add(txtTrimStart);
+
+            txtTrimEnd = new TextBox() { PlaceholderText = "Bitiş (sn)", Location = new Point(135, 20), Size = new Size(110, 23) };
+            grpTrimBox.Controls.Add(txtTrimEnd);
+
+            btnApplyTrim = CreateModernActionButton("Uygula", 260, 18, 110, 27, Color.FromArgb(0, 120, 212), Color.White);
+            btnApplyTrim.Click += BtnApplyTrim_Click;
+            grpTrimBox.Controls.Add(btnApplyTrim);
+            // ---------------------------------------------------------------------
+
+            // Checkbox'lar
+            chkSplitAudio = new CheckBox() { Text = "Sesleri .WAV Olarak Ayır", Location = new Point(15, 252), Size = new Size(170, 22), Checked = false, Font = new Font("Segoe UI", 8.5f) };
+            chkSplitAudio.CheckedChanged += (s, e) => {
+                chkSplitAudio.ForeColor = isDarkMode ? darkText : lightText;
+                if (lstQueueBox.SelectedItem is QueueItemData data) DisplayItemDetails(data);
+            };
             tabDashboard.Controls.Add(chkSplitAudio);
 
-            chkAutoMode = new CheckBox() { Text = "Merzigo Oto", Location = new Point(460, 348), Size = new Size(110, 25), Font = new Font("Segoe UI", 9, FontStyle.Bold) };
+            chkAutoMode = new CheckBox() { Text = "Merzigo Oto", Location = new Point(200, 252), Size = new Size(110, 22), Font = new Font("Segoe UI", 8.5f, FontStyle.Bold) };
             chkAutoMode.CheckedChanged += ChkAutoMode_CheckedChanged;
             tabDashboard.Controls.Add(chkAutoMode);
 
-            // Aksiyon Butonları
-            btnStart = CreateModernActionButton("🚀 BAŞLAT", 15, 410, 150, 45, Color.FromArgb(16, 124, 65), Color.White);
+            // Ana Aksiyon Butonları
+            btnStart = CreateModernActionButton("🚀 BAŞLAT", 15, 285, 140, 38, Color.FromArgb(16, 124, 65), Color.White);
             btnStart.Click += BtnStart_Click;
             tabDashboard.Controls.Add(btnStart);
 
-            btnPauseResume = CreateModernActionButton("Duraklat", 175, 410, 120, 45, Color.FromArgb(0, 120, 212), Color.White);
+            btnPauseResume = CreateModernActionButton("Duraklat", 162, 285, 110, 38, Color.FromArgb(0, 120, 212), Color.White);
             btnPauseResume.Enabled = false;
             btnPauseResume.Click += BtnPauseResume_Click;
             tabDashboard.Controls.Add(btnPauseResume);
 
-            btnStop = CreateModernActionButton("İptal Et", 305, 410, 100, 45, Color.FromArgb(232, 17, 35), Color.White);
+            btnStop = CreateModernActionButton("İptal Et", 279, 285, 95, 38, Color.FromArgb(232, 17, 35), Color.White);
             btnStop.Enabled = false;
             btnStop.Click += BtnStop_Click;
             tabDashboard.Controls.Add(btnStop);
 
-            btnClearQueue = CreateModernActionButton("🧹 Temizle", 415, 410, 100, 45, Color.FromArgb(55, 55, 60), Color.FromArgb(240, 240, 240));
+            btnClearQueue = CreateModernActionButton("🧹 Temizle", 381, 285, 95, 38, Color.FromArgb(55, 55, 60), Color.FromArgb(240, 240, 240));
             btnClearQueue.Click += BtnClearQueue_Click;
             tabDashboard.Controls.Add(btnClearQueue);
 
-            btnToggleTheme = CreateModernActionButton("🌓 Tema", 525, 410, 110, 45, Color.FromArgb(55, 55, 60), Color.FromArgb(240, 240, 240));
+            btnToggleTheme = CreateModernActionButton("🌓 Tema", 483, 285, 95, 38, Color.FromArgb(55, 55, 60), Color.FromArgb(240, 240, 240));
             btnToggleTheme.Click += (s, e) => {
                 isDarkMode = !isDarkMode;
                 ApplyTheme();
             };
             tabDashboard.Controls.Add(btnToggleTheme);
 
-            btnCleanOriginals = CreateModernActionButton("🗑 Hamları Sil", 645, 410, 110, 45, Color.FromArgb(85, 50, 50), Color.White);
+            btnCleanOriginals = CreateModernActionButton("🗑 Hamları Sil", 585, 285, 155, 38, Color.FromArgb(85, 50, 50), Color.White);
             btnCleanOriginals.Click += BtnCleanOriginals_Click;
             tabDashboard.Controls.Add(btnCleanOriginals);
+
+            // --- KOMPAKT HİZALANMIŞ BİLGİ ALANI ---
+            lblDashboardSizeInfo = new Label()
+            {
+                Text = "Dönüştürme Bilgisi: Listeden bir video seçin...",
+                Location = new Point(15, 332),
+                Size = new Size(740, 275),
+                Font = new Font("Segoe UI", 8.5f, FontStyle.Regular),
+                ForeColor = Color.LightSkyBlue,
+                Anchor = AnchorStyles.Top | AnchorStyles.Bottom | AnchorStyles.Left | AnchorStyles.Right
+            };
+            tabDashboard.Controls.Add(lblDashboardSizeInfo);
 
 
             // --- TAB 2: ÖZET SAYFASI ---
@@ -377,11 +431,9 @@ namespace VideoOptimizerV2
             lblDetailStatus = new Label() { Text = "Status: Bekliyor", Location = new Point(15, 42), Size = new Size(700, 20), Font = new Font("Segoe UI", 9) };
             pnlDetails.Controls.Add(lblDetailStatus);
 
-            // Kaynak Alanı
             lblDetailSource = new Label() { Text = "Kaynak: -", Location = new Point(15, 72), Size = new Size(610, 45), Font = new Font("Segoe UI", 9) };
             pnlDetails.Controls.Add(lblDetailSource);
 
-            // Minimalist Şık Kaynak Kopyala Butonu
             Button btnCopySource = CreateModernActionButton("📁 Klasörde Aç", 635, 74, 90, 28, Color.FromArgb(60, 60, 65), Color.White);
             btnCopySource.Font = new Font("Segoe UI", 8.5f, FontStyle.Regular);
             btnCopySource.Click += (s, e) => {
@@ -392,7 +444,6 @@ namespace VideoOptimizerV2
                     {
                         if (File.Exists(fullPath))
                         {
-                            // Dosyanın bulunduğu klasörü aç ve dosyayı seçili yap
                             Process.Start("explorer.exe", $"/select,\"{fullPath}\"");
                             UpdateStatus("Durum: Kaynak videonun klasörü açıldı.");
                         }
@@ -402,7 +453,6 @@ namespace VideoOptimizerV2
                         }
                         else
                         {
-                            // Dosya yerinde yoksa sadece yolu panoya kopyala yedek plan olarak
                             Clipboard.SetText(fullPath);
                             UpdateStatus("Durum: Dosya bulunamadı, yol panoya kopyalandı.");
                         }
@@ -412,11 +462,9 @@ namespace VideoOptimizerV2
             };
             pnlDetails.Controls.Add(btnCopySource);
 
-            // Hedef Alanı
             lblDetailTarget = new Label() { Text = "Hedef: -", Location = new Point(15, 127), Size = new Size(610, 45), Font = new Font("Segoe UI", 9) };
             pnlDetails.Controls.Add(lblDetailTarget);
 
-            // Minimalist Şık Hedef Kopyala Butonu
             Button btnCopyTarget = CreateModernActionButton("📁 Klasörde Aç", 635, 129, 90, 28, Color.FromArgb(60, 60, 65), Color.White);
             btnCopyTarget.Font = new Font("Segoe UI", 8.5f, FontStyle.Regular);
             btnCopyTarget.Click += (s, e) => {
@@ -427,13 +475,11 @@ namespace VideoOptimizerV2
                     {
                         if (File.Exists(fullPath))
                         {
-                            // Hedef dosyanın bulunduğu klasörü aç ve dosyayı seçili yap
                             Process.Start("explorer.exe", $"/select,\"{fullPath}\"");
                             UpdateStatus("Durum: Hedef videonun klasörü açıldı.");
                         }
                         else
                         {
-                            // Eğer dosya henüz oluşmadıysa veya klasörse direkt klasörü aç
                             string dirPath = Path.GetDirectoryName(fullPath);
                             if (Directory.Exists(dirPath))
                             {
@@ -454,7 +500,6 @@ namespace VideoOptimizerV2
             lblDetailPreset = new Label() { Text = "Ön Ayar: -", Location = new Point(15, 182), Size = new Size(700, 22), Font = new Font("Segoe UI", 9) };
             pnlDetails.Controls.Add(lblDetailPreset);
 
-            // Orijinal boyut ve zaman detay alanı (Eski şık Label yapısı)
             lblDetailSizeInfo = new Label() { Text = "Boyut Analizi & Zaman: İşlem bekleniyor...", Location = new Point(15, 212), Size = new Size(700, 290), Font = new Font("Segoe UI", 9, FontStyle.Bold), ForeColor = Color.DarkBlue };
             pnlDetails.Controls.Add(lblDetailSizeInfo);
 
@@ -469,17 +514,88 @@ namespace VideoOptimizerV2
                 Font = new Font("Segoe UI", 9, FontStyle.Bold),
                 Anchor = AnchorStyles.Bottom | AnchorStyles.Left | AnchorStyles.Right
             };
-            lblStatus.MouseDown += lblStatus_MouseDown; // <-- Buraya ekledik
+            lblStatus.MouseDown += lblStatus_MouseDown;
             this.Controls.Add(lblStatus);
+        }
+
+        private void BtnApplyTrim_Click(object sender, EventArgs e)
+        {
+            if (lstQueueBox.SelectedItems.Count == 0)
+            {
+                MessageBox.Show("Lütfen listeden en az bir video seçin!", "Uyarı", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+                return;
+            }
+
+            string startVal = txtTrimStart.Text.Trim();
+            string endVal = txtTrimEnd.Text.Trim();
+
+            foreach (QueueItemData item in lstQueueBox.SelectedItems)
+            {
+                item.TrimStart = startVal;
+                item.TrimEnd = endVal;
+            }
+
+            if (lstQueueBox.SelectedItem is QueueItemData currentData)
+            {
+                DisplayItemDetails(currentData);
+            }
+
+            MessageBox.Show($"{lstQueueBox.SelectedItems.Count} adet video için kesme aralığı başarıyla uygulandı!\n\nBaşlangıç: {(string.IsNullOrEmpty(startVal) ? "Baştan" : startVal)}\nBitiş: {(string.IsNullOrEmpty(endVal) ? "Sona Kadar" : endVal)}",
+                "Başarılı", MessageBoxButtons.OK, MessageBoxIcon.Information);
+
+            lstQueueBox.Invalidate();
+        }
+
+        private void LstQueueBox_SelectedIndexChanged(object sender, EventArgs e)
+        {
+            if (lstQueueBox.SelectedItem is QueueItemData selectedItem)
+            {
+                txtTrimStart.Text = selectedItem.TrimStart ?? "";
+                txtTrimEnd.Text = selectedItem.TrimEnd ?? "";
+                DisplayItemDetails(selectedItem);
+            }
+            else
+            {
+                txtTrimStart.Text = "";
+                txtTrimEnd.Text = "";
+                if (lblDashboardSizeInfo != null) lblDashboardSizeInfo.Text = "Dönüştürme Bilgisi: Listeden bir video seçin...";
+            }
+        }
+
+        private double ParseTimestampToSeconds(string timeText)
+        {
+            if (string.IsNullOrWhiteSpace(timeText)) return 0;
+
+            if (double.TryParse(timeText, System.Globalization.NumberStyles.Any, System.Globalization.CultureInfo.InvariantCulture, out double directSec))
+            {
+                return directSec;
+            }
+
+            string[] parts = timeText.Split(':');
+            double totalSeconds = 0;
+
+            if (parts.Length == 2)
+            {
+                if (double.TryParse(parts[0], out double min) && double.TryParse(parts[1], out double sec))
+                {
+                    totalSeconds = (min * 60) + sec;
+                }
+            }
+            else if (parts.Length == 3)
+            {
+                if (double.TryParse(parts[0], out double hour) && double.TryParse(parts[1], out double min) && double.TryParse(parts[2], out double sec))
+                {
+                    totalSeconds = (hour * 3600) + (min * 60) + sec;
+                }
+            }
+
+            return totalSeconds;
         }
 
         private void lblStatus_MouseDown(object sender, MouseEventArgs e)
         {
-            // Sadece sol tıklama ile ilgileniyoruz
             if (e.Button != MouseButtons.Left) return;
 
-            // "Durum:" yazısı genelde label'ın en sol başındadır (ilk 45-50 piksel arası).
-            // Farenin X koordinatı 0 ile 50 piksel arasındaysa (yani sol taraftaki "Durum:" yazısına tıklandıysa) tetikle:
             if (e.X >= 0 && e.X <= 50)
             {
                 if ((DateTime.Now - lastClickTime).TotalSeconds > 1)
@@ -498,7 +614,6 @@ namespace VideoOptimizerV2
             }
             else
             {
-                // Sol taraftaki "Durum:" haricinde başka bir yere tıklandıysa sayacı sıfırla
                 clickCount = 0;
             }
         }
@@ -757,7 +872,7 @@ namespace VideoOptimizerV2
             {
                 foreach (Control ctrl in tabDashboard.Controls)
                 {
-                    if (ctrl is Label && ctrl != lblDropZone)
+                    if (ctrl is Label && ctrl != lblDropZone && ctrl != lblDashboardSizeInfo)
                         ctrl.ForeColor = activeText;
 
                     if (ctrl is Button btn && btn != btnStart && btn != btnPauseResume && btn != btnStop && btn != btnClearQueue && btn != btnToggleTheme && btn != btnCleanOriginals)
@@ -770,6 +885,9 @@ namespace VideoOptimizerV2
                     }
                 }
             }
+
+            if (lblDashboardSizeInfo != null)
+                lblDashboardSizeInfo.ForeColor = isDarkMode ? Color.LightSkyBlue : Color.DarkBlue;
 
             if (pnlDetails != null)
             {
@@ -868,6 +986,7 @@ namespace VideoOptimizerV2
             lblDetailTarget.Text = "Hedef: -";
             lblDetailPreset.Text = "Ön Ayar: -";
             lblDetailSizeInfo.Text = "İşlem bekleniyor...";
+            if (lblDashboardSizeInfo != null) lblDashboardSizeInfo.Text = "Dönüştürme Bilgisi: Listeden bir video seçin...";
 
             lstQueueBox.Refresh();
             UpdateStatus("Durum: Kuyruk tamamen temizlendi ve sıfırlandı. Yeni video bırakabilirsiniz.");
@@ -941,7 +1060,7 @@ namespace VideoOptimizerV2
                     queueList.Clear();
                     nasFolderPath = Path.GetDirectoryName(ofd.FileNames[0]);
 
-                    foreach (var file in ofd.FileNames) AddVideoToQueue(file);
+                    foreach (string file in ofd.FileNames) AddVideoToQueue(file);
 
                     if (queueList.Count > 0) lstQueueBox.SelectedIndex = 0;
 
@@ -1125,6 +1244,10 @@ namespace VideoOptimizerV2
                 lblDetailTarget.Text = $"Hedef:\n{target}";
                 lblDetailPreset.Text = $"Ön Ayar: {preset}";
                 lblDetailSizeInfo.Text = sizeInfo;
+                if (lblDashboardSizeInfo != null)
+                {
+                    lblDashboardSizeInfo.Text = $"SEÇİLİ VİDEO: {title}\n" + sizeInfo;
+                }
             });
         }
 
@@ -1176,6 +1299,9 @@ namespace VideoOptimizerV2
                         if (File.Exists(ffmpegPath))
                         {
                             itemData.AudioStreamCount = GetAudioStreamCount(ffmpegPath, filePath);
+                            var (dur, res, br) = GetVideoInfo(ffmpegPath, filePath);
+                            if (!string.IsNullOrEmpty(res) && res != "Bilinmiyor") itemData.Resolution = res;
+                            if (!string.IsNullOrEmpty(br) && br != "Bilinmiyor") itemData.Bitrate = br;
                         }
                     }
                     catch { }
@@ -1220,14 +1346,6 @@ namespace VideoOptimizerV2
             }
         }
 
-        private void LstQueueBox_SelectedIndexChanged(object sender, EventArgs e)
-        {
-            if (lstQueueBox.SelectedItem is QueueItemData data)
-            {
-                DisplayItemDetails(data);
-            }
-        }
-
         private void DisplayItemDetails(QueueItemData data)
         {
             if (data != null && File.Exists(data.FilePath))
@@ -1235,11 +1353,15 @@ namespace VideoOptimizerV2
                 FileInfo fi = new FileInfo(data.FilePath);
                 double sizeMb = fi.Length / (1024.0 * 1024.0);
 
+                string sourceExt = Path.GetExtension(data.FilePath).ToUpper();
                 string outputSubFolder = GetDynamicTargetPath(data.FilePath);
                 string targetFile = Path.Combine(outputSubFolder, Path.GetFileNameWithoutExtension(data.FilePath) + ".mp4");
 
                 string selectedPresetText = cmbPresets.SelectedItem?.ToString() ?? "";
                 string statusDescription = "Bekliyor";
+
+                // HEDEF DÖNÜŞTÜRME BİLGİSİ
+                string conversionSummary = $"• Dönüştürme: {sourceExt}  ➔  MP4 (H.264 Video + AAC Ses) | [{selectedPresetText}]";
 
                 string audioSummary = data.AudioStreamCount > 0 ? $"{data.AudioStreamCount} Adet Ses Kanalı Bulundu" : "Ses kanalı yok veya taranmadı";
                 if (chkSplitAudio.Checked && data.AudioStreamCount > 0)
@@ -1247,19 +1369,26 @@ namespace VideoOptimizerV2
                     audioSummary += " (.WAV Olarak Ayrıştırılacak)";
                 }
 
-                string detailsText = $"Boyut Analizi:\nOrijinal Çözünürlük: {data.Resolution} (Orijinal Korunuyor)\nOrijinal Boyut: {sizeMb:F2} MB\n\nSes Bilgisi:\n• {audioSummary}\n\nZaman Bilgileri:\nBaşlangıç: {data.StartTimeText}\nBitiş: {data.EndTimeText}";
+                string trimSummary = "Kesme: Yok (Tamamı Alınıyor)";
+                if (!string.IsNullOrEmpty(data.TrimStart) || !string.IsNullOrEmpty(data.TrimEnd))
+                {
+                    string startStr = string.IsNullOrEmpty(data.TrimStart) ? "Baştan" : data.TrimStart;
+                    string endStr = string.IsNullOrEmpty(data.TrimEnd) ? "Sona Kadar" : data.TrimEnd;
+                    trimSummary = $"Kesme Aralığı: {startStr} -> {endStr}";
+                }
 
+                string detailsText = $"İşlem Özeti & Boyut Analizi:\n{conversionSummary}\nOrijinal Çözünürlük: {data.Resolution} | Bitrate: {data.Bitrate}\nOrijinal Boyut: {sizeMb:F2} MB\n\nKesme Bilgisi:\n• {trimSummary}\n\nSes Bilgisi:\n• {audioSummary}\n\nZaman Bilgileri:\nBaşlangıç: {data.StartTimeText}\nBitiş: {data.EndTimeText}";
                 if (data.Status == "Tamam")
                 {
                     statusDescription = "Başarıyla Tamamlandı";
                     double savedMb = sizeMb - data.ResultSizeMb;
                     string wavOutputInfo = (chkSplitAudio.Checked && data.AudioStreamCount > 0) ? $"\n• Ses: {data.AudioStreamCount} kanal .wav olarak kaydedildi." : "";
-                    detailsText = $"Boyut Analizi:\nOrijinal Çözünürlük: {data.Resolution} (Orijinal Korundu)\nOrijinal: {sizeMb:F2} MB | Yeni: {data.ResultSizeMb:F2} MB\nKazanç: %{data.SavedPercent:F1} ({savedMb:F2} MB azaldı)\n\nÇıktılar:\n• Video: {Path.GetFileName(targetFile)}{wavOutputInfo}\n\nZaman Bilgileri:\nBaşlangıç: {data.StartTimeText}\nBitiş: {data.EndTimeText}";
+                    detailsText = $"İşlem Tamamlandı:\n{conversionSummary}\nOrijinal: {sizeMb:F2} MB | Yeni: {data.ResultSizeMb:F2} MB\nKazanç: %{data.SavedPercent:F1} ({savedMb:F2} MB azaldı)\n\nKesme Bilgisi:\n• {trimSummary}\n\nÇıktılar:\n• Video: {Path.GetFileName(targetFile)}{wavOutputInfo}\n\nZaman Bilgileri:\nBaşlangıç: {data.StartTimeText}\nBitiş: {data.EndTimeText}";
                 }
                 else if (data.Status.StartsWith("İşleniyor") || data.Status.StartsWith("Ses") || data.Status == "Duraklatıldı")
                 {
                     statusDescription = $"{data.Status} - %{data.Percent}";
-                    detailsText = $"Boyut Analizi:\nOrijinal Çözünürlük: {data.Resolution}\nOrijinal Boyut: {sizeMb:F2} MB\nDurum: {data.Status} (%{data.Percent})\n\nSes Bilgisi:\n• {audioSummary}\n\nZaman Bilgileri:\nBaşlangıç: {data.StartTimeText}\nBitiş: {data.EndTimeText}";
+                    detailsText = $"İşlem Sürüyor:\n{conversionSummary}\nOrijinal Boyut: {sizeMb:F2} MB | İlerleme: %{data.Percent}\n\nKesme Bilgisi:\n• {trimSummary}\n\nSes Bilgisi:\n• {audioSummary}\n\nZaman Bilgileri:\nBaşlangıç: {data.StartTimeText}\nBitiş: {data.EndTimeText}";
                 }
                 else if (data.Status == "İptal Edildi" || data.Status == "Hata")
                 {
@@ -1539,7 +1668,16 @@ namespace VideoOptimizerV2
                 logBuilder.AppendLine($"Başlangıç Zamanı: {DateTime.Now}");
                 logBuilder.AppendLine($"Dosya Yolu: {qData.FilePath}");
                 logBuilder.AppendLine($"Ön Ayar (Preset): {preset}");
-                logBuilder.AppendLine($"Kullanılan Encoder: {videoEncoder}");
+                logBuilder.AppendLine($"Başlangıçta Denenen Encoder: {videoEncoder}");
+
+                string trimLogInfo = "Kesme İşlemi: Uygulanmadı (Tamamı Alınıyor)";
+                if (!string.IsNullOrEmpty(qData.TrimStart) || !string.IsNullOrEmpty(qData.TrimEnd))
+                {
+                    string startStr = string.IsNullOrEmpty(qData.TrimStart) ? "Baştan" : qData.TrimStart;
+                    string endStr = string.IsNullOrEmpty(qData.TrimEnd) ? "Sona Kadar" : qData.TrimEnd;
+                    trimLogInfo = $"Kesme Aralığı: [{startStr}] - [{endStr}] arasında kırpılacak.";
+                }
+                logBuilder.AppendLine(trimLogInfo);
                 logBuilder.AppendLine("--------------------------------------------------");
 
                 SaveLogFile(outputSubFolder, nameOnly + "_baslangic", logBuilder);
@@ -1565,9 +1703,37 @@ namespace VideoOptimizerV2
 
                 WriteStatusForPython(qData.FileName, "İşleniyor", 0);
 
-                var (totalSeconds, originalResolution) = GetVideoInfo(ffmpegPath, qData.FilePath);
+                var (totalSeconds, originalResolution, originalBitrate) = GetVideoInfo(ffmpegPath, qData.FilePath);
                 qData.Resolution = originalResolution;
+                qData.Bitrate = originalBitrate; // Eğer QueueItemData'ya kaydetmek istiyorsan
                 logBuilder.AppendLine($"Video Süresi (Saniye): {totalSeconds}, Çözünürlük: {originalResolution}");
+
+                string ssParam = !string.IsNullOrEmpty(qData.TrimStart) ? $"-ss {qData.TrimStart} " : "";
+                string toParam = !string.IsNullOrEmpty(qData.TrimEnd) ? $"-to {qData.TrimEnd} " : "";
+
+                string activeEncoder = videoEncoder;
+                string cleanRes = (originalResolution ?? "").Trim();
+
+                // Eğer kullanıcı arayüzden özel bir sabit çözünürlük seçmediyse ve kaynak 576p/608p ise CPU kullan.
+                // AMA kullanıcı 1920x1080 veya 1280x720 seçtiyse GPU (Donanım) gücünü kullan!
+                bool isUserForcedResolution = preset.Contains("1920x1080") || preset.Contains("1280x720");
+
+                if (!isUserForcedResolution && (cleanRes.Contains("576") || cleanRes.Contains("608")))
+                {
+                    activeEncoder = "libx264";
+                    logBuilder.AppendLine($"BİLGİ: Orijinal çözünürlık {cleanRes} olduğu ve özel boyut seçilmediği için CPU (libx264) moduna geçildi.");
+                }
+                else
+                {
+                    logBuilder.AppendLine($"BİLGİ: Hız modunda (Donanım/GPU: {activeEncoder}) devam ediliyor.");
+                }
+
+                string encoderDisplayName = "İşlemci (CPU - libx264)";
+                if (activeEncoder == "h264_nvenc") encoderDisplayName = "NVIDIA Ekran Kartı (NVENC)";
+                else if (activeEncoder == "h264_amf") encoderDisplayName = "AMD Ekran Kartı (AMF)";
+
+                logBuilder.AppendLine($"Aktif Kullanılan Donanım/Kodlayıcı: {encoderDisplayName}");
+                SafeInvoke(() => UpdateStatus($"İşleniyor: {qData.FileName} ({encoderDisplayName})..."));
 
                 double originalSizeMb = 0;
                 try
@@ -1589,6 +1755,11 @@ namespace VideoOptimizerV2
                     videoFilters.Add("bwdif=mode=send_frame:parity=auto:deint=interlaced");
                 }
 
+                if (cleanRes.Contains("608"))
+                {
+                    videoFilters.Add("crop=720:576:0:0");
+                }
+
                 if (preset.Contains("60")) videoFilters.Add("fps=60");
                 else if (preset.Contains("30")) videoFilters.Add("fps=30");
 
@@ -1598,40 +1769,7 @@ namespace VideoOptimizerV2
                     finalFilter = "-vf \"" + string.Join(",", videoFilters) + "\" ";
                 }
 
-                string presetSpeed = "p6";
-                string qualityParam = "-cq 18 -rc constqp";
-
-                if (videoEncoder == "h264_nvenc")
-                {
-                    presetSpeed = "p6";
-                    qualityParam = "-cq 18 -rc constqp";
-                }
-                else if (videoEncoder == "h264_amf")
-                {
-                    presetSpeed = "balanced";
-                    qualityParam = "-rc cqp -qp_i 18 -qp_p 18";
-                }
-                else
-                {
-                    presetSpeed = "medium";
-                    qualityParam = "-crf 18";
-                }
-
-                if (preset.Contains("Maksimum Kalite"))
-                {
-                    if (videoEncoder == "h264_nvenc") { presetSpeed = "p7"; qualityParam = "-cq 14 -rc constqp"; }
-                    else if (videoEncoder == "h264_amf") { presetSpeed = "quality"; qualityParam = "-rc cqp -qp_i 14 -qp_p 14"; }
-                    else { presetSpeed = "slow"; qualityParam = "-crf 14"; }
-                }
-                else if (preset.Contains("60 FPS") || preset.Contains("30 FPS"))
-                {
-                    if (videoEncoder == "h264_nvenc") { presetSpeed = "p6"; qualityParam = "-cq 18 -rc constqp"; }
-                    else if (videoEncoder == "h264_amf") { presetSpeed = "balanced"; qualityParam = "-rc cqp -qp_i 18 -qp_p 18"; }
-                    else { presetSpeed = "medium"; qualityParam = "-crf 18"; }
-                }
-
                 string tempOutputVideo = Path.Combine(outputSubFolder, "__converting__" + nameOnly + ".mp4");
-
                 string finalOutputVideo = Path.Combine(outputSubFolder, nameOnly + ".mp4");
                 if (File.Exists(finalOutputVideo))
                 {
@@ -1639,101 +1777,191 @@ namespace VideoOptimizerV2
                     finalOutputVideo = Path.Combine(outputSubFolder, $"{nameOnly}_{timestamp}.mp4");
                 }
 
-                string videoCmdArgs = $"-y -i \"{qData.FilePath}\" {finalFilter}-vf \"scale=1920:1080:flags=lanczos,colorspace=bt709:iall=bt709:fast=1\" -c:v {videoEncoder} -preset {presetSpeed} {qualityParam} -color_primaries bt709 -color_trc bt709 -colorspace bt709 -color_range tv -pix_fmt yuv420p -c:a aac -b:a 128k -ac 2 -movflags +faststart \"{tempOutputVideo}\"";
-                logBuilder.AppendLine($"Çalıştırılan FFmpeg Komutu:\nffmpeg.exe {videoCmdArgs}");
-
                 int processExitCode = -1;
-                DateTime startTime = DateTime.Now;
-                DateTime lastUiUpdate = DateTime.MinValue;
+                bool successRender = false;
 
-                try
+                for (int attempt = 0; attempt < 2; attempt++)
                 {
-                    using (Process process = new Process())
+                    token.ThrowIfCancellationRequested();
+
+                    string presetSpeed = "p6";
+                    string qualityParam = "-cq 18 -rc constqp";
+
+                    if (activeEncoder == "h264_nvenc")
                     {
-                        currentProcess = process;
-                        process.StartInfo = new ProcessStartInfo
-                        {
-                            FileName = ffmpegPath,
-                            Arguments = videoCmdArgs,
-                            UseShellExecute = false,
-                            RedirectStandardError = true,
-                            CreateNoWindow = true,
-                            StandardErrorEncoding = Encoding.UTF8
-                        };
+                        presetSpeed = "p6";
+                        qualityParam = "-cq 18 -rc constqp";
+                    }
+                    else if (activeEncoder == "h264_amf")
+                    {
+                        presetSpeed = "balanced";
+                        qualityParam = "-rc cqp -qp_i 18 -qp_p 18";
+                    }
+                    else
+                    {
+                        presetSpeed = "faster";
+                        qualityParam = "-crf 18";
+                    }
 
-                        process.ErrorDataReceived += (sender, e) =>
+                    if (preset.Contains("Maksimum Kalite"))
+                    {
+                        if (activeEncoder == "h264_nvenc") { presetSpeed = "p7"; qualityParam = "-cq 14 -rc constqp"; }
+                        else if (activeEncoder == "h264_amf") { presetSpeed = "quality"; qualityParam = "-rc cqp -qp_i 14 -qp_p 14"; }
+                        else { presetSpeed = "faster"; qualityParam = "-crf 14"; }
+                    }
+                    // --- BURAYA SADECE BU DENGELİ KOŞULUNU EKLEYECEKTİK ---
+                    else if (preset.Contains("Dengeli"))
+                    {
+                        if (activeEncoder == "h264_nvenc") { presetSpeed = "p6"; qualityParam = "-cq 20 -rc constqp"; }
+                        else if (activeEncoder == "h264_amf") { presetSpeed = "balanced"; qualityParam = "-rc cqp -qp_i 20 -qp_p 20"; }
+                        else { presetSpeed = "faster"; qualityParam = "-crf 20"; }
+                    }
+                    // -------------------------------------------------------
+                    else if (preset.Contains("60 FPS") || preset.Contains("30 FPS"))
+                    {
+                        if (activeEncoder == "h264_nvenc") { presetSpeed = "p6"; qualityParam = "-cq 18 -rc constqp"; }
+                        else if (activeEncoder == "h264_amf") { presetSpeed = "balanced"; qualityParam = "-rc cqp -qp_i 18 -qp_p 18"; }
+                        else { presetSpeed = "faster"; qualityParam = "-crf 18"; }
+                    }
+
+                    string activeFilter = finalFilter;
+
+                    string colorParams = "-color_primaries bt709 -color_trc bt709 -colorspace bt709 -color_range tv";
+                    if (activeEncoder == "h264_nvenc")
+                    {
+                        colorParams = "-color_primaries bt470bg -color_trc bt470bg -colorspace bt470bg -color_range pc";
+                    }
+
+                    string resolutionParam = !string.IsNullOrEmpty(originalResolution) ? $"-s {originalResolution} " : "";
+
+                    // ÇÖZÜNÜRLÜK ZORLAMA KONTROLÜ
+                    if (preset.Contains("1920x1080"))
+                    {
+                        resolutionParam = "-s 1920x1080 ";
+                        logBuilder.AppendLine("BİLGİ: Full HD (1920x1080) sabit çözünürlük uygulanıyor.");
+                    }
+                    else if (preset.Contains("1280x720"))
+                    {
+                        resolutionParam = "-s 1280x720 ";
+                        logBuilder.AppendLine("BİLGİ: HD (1280x720) sabit çözünürlük uygulanıyor.");
+                    }
+
+                    string videoCmdArgs = $"-y {ssParam}-i \"{qData.FilePath}\" {toParam}{activeFilter}{resolutionParam}-c:v {activeEncoder} -preset {presetSpeed} {qualityParam} {colorParams} -pix_fmt yuv420p -c:a aac -b:a 128k -ac 2 -movflags +faststart \"{tempOutputVideo}\"";
+
+                    logBuilder.AppendLine($"Aktif Kullanılan Encoder ({activeEncoder}) ile Deneniyor. Komut:\nffmpeg.exe {videoCmdArgs}");
+
+                    DateTime startTime = DateTime.Now;
+                    DateTime lastUiUpdate = DateTime.MinValue;
+
+                    try
+                    {
+                        using (Process process = new Process())
                         {
-                            if (!string.IsNullOrEmpty(e.Data))
+                            currentProcess = process;
+                            process.StartInfo = new ProcessStartInfo
                             {
-                                logBuilder.AppendLine(e.Data);
+                                FileName = ffmpegPath,
+                                Arguments = videoCmdArgs,
+                                UseShellExecute = false,
+                                RedirectStandardError = true,
+                                CreateNoWindow = true,
+                                StandardErrorEncoding = Encoding.UTF8
+                            };
 
-                                if (isPaused) return;
-
-                                Match fpsMatch = Regex.Match(e.Data, @"fps=\s*([\d\.]+)");
-                                if (fpsMatch.Success && double.TryParse(fpsMatch.Groups[1].Value, System.Globalization.NumberStyles.Any, System.Globalization.CultureInfo.InvariantCulture, out double parsedFps))
+                            process.ErrorDataReceived += (sender, e) =>
+                            {
+                                if (!string.IsNullOrEmpty(e.Data))
                                 {
-                                    qData.Fps = parsedFps;
-                                }
+                                    logBuilder.AppendLine(e.Data);
 
-                                if (totalSeconds > 0)
-                                {
-                                    Match timeMatch = Regex.Match(e.Data, @"time=(\d{2}):(\d{2}):(\d{2})\.(\d{2})");
-                                    if (timeMatch.Success)
+                                    if (isPaused) return;
+
+                                    Match fpsMatch = Regex.Match(e.Data, @"fps=\s*([\d\.]+)");
+                                    if (fpsMatch.Success && double.TryParse(fpsMatch.Groups[1].Value, System.Globalization.NumberStyles.Any, System.Globalization.CultureInfo.InvariantCulture, out double parsedFps))
                                     {
-                                        double h = double.Parse(timeMatch.Groups[1].Value);
-                                        double m = double.Parse(timeMatch.Groups[2].Value);
-                                        double sVal = double.Parse(timeMatch.Groups[3].Value);
-                                        double cs = double.Parse(timeMatch.Groups[4].Value);
+                                        qData.Fps = parsedFps;
+                                    }
 
-                                        double currentSeconds = h * 3600 + m * 60 + sVal + cs / 100.0;
-                                        int percent = (int)((currentSeconds / totalSeconds) * 100);
-                                        if (percent > 100) percent = 100;
-                                        if (percent < 0) percent = 0;
-
-                                        qData.Percent = percent;
-
-                                        if (percent > 2)
+                                    if (totalSeconds > 0)
+                                    {
+                                        Match timeMatch = Regex.Match(e.Data, @"time=(\d{2}):(\d{2}):(\d{2})\.(\d{2})");
+                                        if (timeMatch.Success)
                                         {
-                                            double elapsedSeconds = (DateTime.Now - startTime).TotalSeconds;
-                                            double estimatedTotalSeconds = elapsedSeconds / (percent / 100.0);
-                                            double remainingSeconds = estimatedTotalSeconds - elapsedSeconds;
-                                            TimeSpan remainingTime = TimeSpan.FromSeconds(Math.Max(0, remainingSeconds));
-                                            qData.TimeRemaining = $"{remainingTime.Hours:D2}:{remainingTime.Minutes:D2}:{remainingTime.Seconds:D2}";
-                                        }
+                                            double h = double.Parse(timeMatch.Groups[1].Value);
+                                            double m = double.Parse(timeMatch.Groups[2].Value);
+                                            double sVal = double.Parse(timeMatch.Groups[3].Value);
+                                            double cs = double.Parse(timeMatch.Groups[4].Value);
 
-                                        if ((DateTime.Now - lastUiUpdate).TotalMilliseconds >= 500)
-                                        {
-                                            lastUiUpdate = DateTime.Now;
-                                            SafeInvoke(() => {
-                                                int idx = queueList.IndexOf(qData);
-                                                if (idx != -1)
-                                                {
-                                                    lstQueueBox.Invalidate(lstQueueBox.GetItemRectangle(idx));
-                                                }
-                                                if (lstQueueBox.SelectedItem == qData) DisplayItemDetails(qData);
-                                            });
+                                            double currentSeconds = h * 3600 + m * 60 + sVal + cs / 100.0;
+                                            int percent = (int)((currentSeconds / totalSeconds) * 100);
+                                            if (percent > 100) percent = 100;
+                                            if (percent < 0) percent = 0;
 
-                                            WriteStatusForPython(qData.FileName, "İşleniyor", qData.Percent);
+                                            qData.Percent = percent;
+
+                                            if (percent > 2)
+                                            {
+                                                double elapsedSeconds = (DateTime.Now - startTime).TotalSeconds;
+                                                double estimatedTotalSeconds = elapsedSeconds / (percent / 100.0);
+                                                double remainingSeconds = estimatedTotalSeconds - elapsedSeconds;
+                                                TimeSpan remainingTime = TimeSpan.FromSeconds(Math.Max(0, remainingSeconds));
+                                                qData.TimeRemaining = $"{remainingTime.Hours:D2}:{remainingTime.Minutes:D2}:{remainingTime.Seconds:D2}";
+                                            }
+
+                                            if ((DateTime.Now - lastUiUpdate).TotalMilliseconds >= 500)
+                                            {
+                                                lastUiUpdate = DateTime.Now;
+                                                SafeInvoke(() => {
+                                                    int idx = queueList.IndexOf(qData);
+                                                    if (idx != -1)
+                                                    {
+                                                        lstQueueBox.Invalidate(lstQueueBox.GetItemRectangle(idx));
+                                                    }
+                                                    if (lstQueueBox.SelectedItem == qData) DisplayItemDetails(qData);
+                                                });
+
+                                                WriteStatusForPython(qData.FileName, "İşleniyor", qData.Percent);
+                                            }
                                         }
                                     }
                                 }
-                            }
-                        };
+                            };
 
-                        process.Start();
-                        process.BeginErrorReadLine();
-                        process.WaitForExit();
-                        processExitCode = process.ExitCode;
+                            process.Start();
+                            process.BeginErrorReadLine();
+                            process.WaitForExit();
+                            processExitCode = process.ExitCode;
+                        }
+                    }
+                    catch (Exception ex)
+                    {
+                        logBuilder.AppendLine($"Süreç Başlatılırken Kritik İstisna (Exception): {ex.Message}\n{ex.StackTrace}");
+                    }
+
+                    currentProcess = null;
+
+                    if (processExitCode == 0 && File.Exists(tempOutputVideo))
+                    {
+                        successRender = true;
+                        break;
+                    }
+                    else
+                    {
+                        if (activeEncoder != "libx264")
+                        {
+                            logBuilder.AppendLine($"UYARI: Donanım kodlayıcısı ({activeEncoder}) hata kodu ({processExitCode}) ile başarısız oldu. Otomatik olarak CPU (libx264) yedek moduna geçiliyor...");
+                            activeEncoder = "libx264";
+                            try { if (File.Exists(tempOutputVideo)) File.Delete(tempOutputVideo); } catch { }
+                            continue;
+                        }
+                        else
+                        {
+                            break;
+                        }
                     }
                 }
-                catch (Exception ex)
-                {
-                    logBuilder.AppendLine($"Süreç Başlatılırken Kritik İstisna (Exception): {ex.Message}\n{ex.StackTrace}");
-                }
 
-                currentProcess = null;
-
-                logBuilder.AppendLine($"Süreç Çıkış Kodu (ExitCode): {processExitCode}");
+                logBuilder.AppendLine($"Sonuç Çıkış Kodu (ExitCode): {processExitCode}");
                 SaveLogFile(outputSubFolder, nameOnly, logBuilder);
 
                 if (token.IsCancellationRequested)
@@ -1751,7 +1979,7 @@ namespace VideoOptimizerV2
                     break;
                 }
 
-                if (processExitCode == 0 && File.Exists(tempOutputVideo))
+                if (successRender && File.Exists(tempOutputVideo))
                 {
                     if (chkSplitAudio.Checked && qData.AudioStreamCount > 0)
                     {
@@ -1799,7 +2027,7 @@ namespace VideoOptimizerV2
                         catch { }
                     }
 
-                    Thread.Sleep(1000);
+                    Thread.Sleep(1500);
                     try
                     {
                         FileInfo processedInfo = new FileInfo(tempOutputVideo);
@@ -1807,8 +2035,31 @@ namespace VideoOptimizerV2
 
                         if (processedSizeMb < originalSizeMb)
                         {
-                            if (File.Exists(finalOutputVideo)) File.Delete(finalOutputVideo);
-                            File.Move(tempOutputVideo, finalOutputVideo);
+                            if (File.Exists(finalOutputVideo))
+                            {
+                                try { File.Delete(finalOutputVideo); } catch { Thread.Sleep(500); }
+                            }
+
+                            bool moved = false;
+                            for (int retry = 0; retry < 5; retry++)
+                            {
+                                try
+                                {
+                                    File.Move(tempOutputVideo, finalOutputVideo);
+                                    moved = true;
+                                    break;
+                                }
+                                catch
+                                {
+                                    Thread.Sleep(1000);
+                                }
+                            }
+
+                            if (!moved)
+                            {
+                                File.Copy(tempOutputVideo, finalOutputVideo, true);
+                                try { File.Delete(tempOutputVideo); } catch { }
+                            }
 
                             qData.Status = "Tamam";
                             qData.ResultSizeMb = processedSizeMb;
@@ -1868,12 +2119,6 @@ namespace VideoOptimizerV2
                         UpdateStatus($"Durum: {qData.FileName} işlenirken hata oluştu.");
                     });
                 }
-            }
-
-            if (!token.IsCancellationRequested)
-            {
-                UpdateStatus("Durum: Tüm kuyruk işlemi tamamlandı.");
-                try { File.Delete(Path.Combine(syncFolderPath, "durum.txt")); } catch { }
             }
         }
 
@@ -1994,8 +2239,8 @@ namespace VideoOptimizerV2
                 {
                     string[] allowedExtensions = { ".ts", ".mov", ".mxf", ".mkv", ".mp4", ".avi", ".webm" };
                     var videoFiles = Directory.GetFiles(targetWatchFolderPath, "*.*", SearchOption.TopDirectoryOnly)
-                                             .Where(file => allowedExtensions.Contains(Path.GetExtension(file).ToLower()) && !file.EndsWith(".partial", StringComparison.OrdinalIgnoreCase))
-                                             .ToArray();
+                                           .Where(file => allowedExtensions.Contains(Path.GetExtension(file).ToLower()) && !file.EndsWith(".partial", StringComparison.OrdinalIgnoreCase))
+                                           .ToArray();
 
                     bool hasNewTasks = false;
 
@@ -2092,10 +2337,11 @@ namespace VideoOptimizerV2
             catch { return 0; }
         }
 
-        private (double duration, string resolution) GetVideoInfo(string ffmpegPath, string inputVideo)
+        private (double duration, string resolution, string bitrate) GetVideoInfo(string ffmpegPath, string inputVideo)
         {
             double duration = 0;
             string resolution = "Bilinmiyor";
+            string bitrate = "Bilinmiyor";
             try
             {
                 ProcessStartInfo psi = new ProcessStartInfo
@@ -2110,6 +2356,8 @@ namespace VideoOptimizerV2
                 using (Process p = Process.Start(psi))
                 {
                     string output = p.StandardError.ReadToEnd();
+
+                    // Süre tespiti
                     Match matchDuration = Regex.Match(output, @"Duration: (\d{2}):(\d{2}):(\d{2})\.(\d{2})");
                     if (matchDuration.Success)
                     {
@@ -2120,15 +2368,23 @@ namespace VideoOptimizerV2
                         duration = h * 3600 + m * 60 + s + cs / 100.0;
                     }
 
+                    // Çözünürlük tespiti
                     Match matchRes = Regex.Match(output, @",\s*(\d{3,4})x(\d{3,4})");
                     if (matchRes.Success)
                     {
                         resolution = $"{matchRes.Groups[1].Value}x{matchRes.Groups[2].Value}";
                     }
+
+                    // Bitrate (Bit Hızı) tespiti
+                    Match matchBitrate = Regex.Match(output, @"bitrate:\s*([^\s]+)");
+                    if (matchBitrate.Success)
+                    {
+                        bitrate = matchBitrate.Groups[1].Value; // Örn: 4520 kb/s
+                    }
                 }
             }
             catch { }
-            return (duration, resolution);
+            return (duration, resolution, bitrate);
         }
 
         private string DetectBestEncoder(string ffmpegPath)
@@ -2172,10 +2428,16 @@ namespace VideoOptimizerV2
         public string TimeRemaining { get; set; }
         public double Fps { get; set; }
         public double ResultSizeMb { get; set; }
-        public double SavedPercent { get; set; }
         public string Resolution { get; set; }
+        public double SavedPercent { get; set; }
+       
         public string StartTimeText { get; set; }
         public string EndTimeText { get; set; }
         public int AudioStreamCount { get; set; }
+
+        public string Bitrate { get; set; } = "Hesaplanıyor..."; // <-- YENİ EKLENEN
+
+        public string TrimStart { get; set; } = "";
+        public string TrimEnd { get; set; } = "";
     }
 }

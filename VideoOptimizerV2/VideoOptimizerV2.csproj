@@ -6,6 +6,12 @@
     <Nullable>enable</Nullable>
     <UseWindowsForms>true</UseWindowsForms>
     <ImplicitUsings>enable</ImplicitUsings>
+    <StartupObject></StartupObject>
+    <ApplicationIcon>Gemini_Generated_Image_64gqjw64gqjw64gq (1).ico</ApplicationIcon>
   </PropertyGroup>
+
+  <ItemGroup>
+    <Content Include="Gemini_Generated_Image_64gqjw64gqjw64gq (1).ico" />
+  </ItemGroup>
 
 </Project>
