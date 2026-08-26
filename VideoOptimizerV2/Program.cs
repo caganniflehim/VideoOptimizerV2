@@ -304,6 +304,7 @@ namespace VideoOptimizerV2
             // Sol tarafta Preset Kutusu
             cmbPresets = new ComboBox() { Location = new Point(15, 200), Size = new Size(220, 25), DropDownStyle = ComboBoxStyle.DropDownList };
             cmbPresets.Items.AddRange(new string[] {
+                "Otomatik Akıllı Mod (Auto-CRF / Bitrate Analizi)",
                 "Yüksek Kalite Orjinal (HQ - RF/CQ 18)",
                 "Dengeli Orijinal (Dengeli - RF/CQ 20)",
                 "Max Kalite Orijinal (Ultra - RF/CQ 14)",
@@ -1228,6 +1229,29 @@ namespace VideoOptimizerV2
             autoTimer.Tick += AutoTimer_Tick;
         }
 
+        private FileSystemWatcher fileWatcher;
+
+        private void InitFolderWatcher()
+        {
+            try
+            {
+                if (!Directory.Exists(syncFolderPath))
+                    Directory.CreateDirectory(syncFolderPath);
+
+                fileWatcher = new FileSystemWatcher(syncFolderPath);
+                fileWatcher.Filter = "convert_listesi.txt";
+                fileWatcher.NotifyFilter = NotifyFilters.LastWrite | NotifyFilters.FileName;
+                fileWatcher.Changed += (s, e) => {
+                    // Txt dosyası değiştiği an AutoTimer tetiklensin veya direkt okunsun
+                    SafeInvoke(() => {
+                        AutoTimer_Tick(null, null);
+                    });
+                };
+                fileWatcher.EnableRaisingEvents = true;
+            }
+            catch { }
+        }
+
         private void InitFolderWatchTimer()
         {
             folderWatchTimer = new System.Windows.Forms.Timer();
@@ -1353,15 +1377,41 @@ namespace VideoOptimizerV2
                 FileInfo fi = new FileInfo(data.FilePath);
                 double sizeMb = fi.Length / (1024.0 * 1024.0);
 
+                // --- 1. STATUS DESCRIPTION'I EN BAŞTA TANIMLIYORUZ ---
+                string statusDescription = "Bekliyor";
+
+                // --- 2. AKILLI MOD CRF HESAPLAMASI ---
+                string calculatedCrf = "18";
+                try
+                {
+                    if (!string.IsNullOrEmpty(data.Bitrate))
+                    {
+                        // Bitrate metninin içindeki harfleri veya boşlukları temizleyip sadece rakamları alalım
+                        string cleanBitrateStr = System.Text.RegularExpressions.Regex.Replace(data.Bitrate, @"[^\d]", "");
+
+                        if (double.TryParse(cleanBitrateStr, System.Globalization.NumberStyles.Any, System.Globalization.CultureInfo.InvariantCulture, out double realBitrate))
+                        {
+                            if (realBitrate > 15000) calculatedCrf = "14";
+                            else if (realBitrate < 4000) calculatedCrf = "20";
+                            else calculatedCrf = "18";
+                        }
+                    }
+                }
+                catch { }
+
                 string sourceExt = Path.GetExtension(data.FilePath).ToUpper();
                 string outputSubFolder = GetDynamicTargetPath(data.FilePath);
                 string targetFile = Path.Combine(outputSubFolder, Path.GetFileNameWithoutExtension(data.FilePath) + ".mp4");
 
                 string selectedPresetText = cmbPresets.SelectedItem?.ToString() ?? "";
-                string statusDescription = "Bekliyor";
 
-                // HEDEF DÖNÜŞTÜRME BİLGİSİ
-                string conversionSummary = $"• Dönüştürme: {sourceExt}  ➔  MP4 (H.264 Video + AAC Ses) | [{selectedPresetText}]";
+                string presetDisplay = selectedPresetText;
+                if (selectedPresetText.Contains("Otomatik Akıllı Mod"))
+                {
+                    presetDisplay = $"Otomatik Akıllı Mod -> {calculatedCrf}";
+                }
+
+                string conversionSummary = $"• Dönüştürme: {sourceExt}  ➔  MP4 (H.264 Video + AAC Ses) | [{presetDisplay}]";
 
                 string audioSummary = data.AudioStreamCount > 0 ? $"{data.AudioStreamCount} Adet Ses Kanalı Bulundu" : "Ses kanalı yok veya taranmadı";
                 if (chkSplitAudio.Checked && data.AudioStreamCount > 0)
@@ -1378,6 +1428,7 @@ namespace VideoOptimizerV2
                 }
 
                 string detailsText = $"İşlem Özeti & Boyut Analizi:\n{conversionSummary}\nOrijinal Çözünürlük: {data.Resolution} | Bitrate: {data.Bitrate}\nOrijinal Boyut: {sizeMb:F2} MB\n\nKesme Bilgisi:\n• {trimSummary}\n\nSes Bilgisi:\n• {audioSummary}\n\nZaman Bilgileri:\nBaşlangıç: {data.StartTimeText}\nBitiş: {data.EndTimeText}";
+
                 if (data.Status == "Tamam")
                 {
                     statusDescription = "Başarıyla Tamamlandı";
@@ -1784,44 +1835,77 @@ namespace VideoOptimizerV2
                 {
                     token.ThrowIfCancellationRequested();
 
+                    // --- DEĞİŞKENLERİ EN BAŞTA TANIMLIYORUZ ---
                     string presetSpeed = "p6";
                     string qualityParam = "-cq 18 -rc constqp";
+                    string crfValue = "18";
 
+                    // --- OTOMATİK AKILLI MOD (BİTRATE ANALİZİ) ---
+                    if (preset.Contains("Otomatik Akıllı Mod"))
+                    {
+                        try
+                        {
+                            FileInfo fInfo = new FileInfo(qData.FilePath);
+                            double durationSec = (totalSeconds > 0) ? totalSeconds : 60.0;
+                            double estimatedKbps = (fInfo.Length * 8.0 / durationSec) / 1000.0;
+
+                            if (estimatedKbps > 15000)
+                            {
+                                crfValue = "14";
+                                qData.ActiveCrf = "14"; // <-- BURAYA ATAMA YAPMALIYIZ
+                                logBuilder.AppendLine($"AKILLI MOD: Kaynak çok yüksek bitrateli (~{estimatedKbps:F0} kbps). Otomatik CRF 14 uygulandı.");
+                            }
+                            else if (estimatedKbps < 4000)
+                            {
+                                crfValue = "20";
+                                qData.ActiveCrf = "20"; // <-- BURAYA ATAMA YAPMALIYIZ
+                                logBuilder.AppendLine($"AKILLI MOD: Kaynak düşük bitrateli (~{estimatedKbps:F0} kbps). Otomatik CRF 20 uygulandı.");
+                            }
+                            else
+                            {
+                                crfValue = "18";
+                                qData.ActiveCrf = "18"; // <-- BURAYA ATAMA YAPMALIYIZ
+                                logBuilder.AppendLine($"AKILLI MOD: Kaynak standart bitrateli (~{estimatedKbps:F0} kbps). Otomatik CRF 18 uygulandı.");
+                            }
+                        }
+                        catch (Exception ex)
+                        {
+                            crfValue = "18";
+                            logBuilder.AppendLine($"AKILLI MOD HATA: Bitrate hesaplanamadı, varsayılan CRF 18 kullanılıyor. ({ex.Message})");
+                        }
+                    }
+                    // --- MANUEL SEÇENEKLER ---
+                    else
+                    {
+                        if (preset.Contains("Maksimum Kalite"))
+                        {
+                            crfValue = "14";
+                        }
+                        else if (preset.Contains("Dengeli"))
+                        {
+                            crfValue = "20";
+                        }
+                        else
+                        {
+                            crfValue = "18";
+                        }
+                    }
+
+                    // --- ENCODER'A GÖRE PARAMETRELERİ BURADA NET OLARAK BAĞLIYORUZ ---
                     if (activeEncoder == "h264_nvenc")
                     {
-                        presetSpeed = "p6";
-                        qualityParam = "-cq 18 -rc constqp";
+                        presetSpeed = (crfValue == "14") ? "p7" : "p6";
+                        qualityParam = $"-cq {crfValue} -rc constqp";
                     }
                     else if (activeEncoder == "h264_amf")
                     {
-                        presetSpeed = "balanced";
-                        qualityParam = "-rc cqp -qp_i 18 -qp_p 18";
+                        presetSpeed = (crfValue == "14") ? "quality" : "balanced";
+                        qualityParam = $"-rc cqp -qp_i {crfValue} -qp_p {crfValue}";
                     }
                     else
                     {
                         presetSpeed = "faster";
-                        qualityParam = "-crf 18";
-                    }
-
-                    if (preset.Contains("Maksimum Kalite"))
-                    {
-                        if (activeEncoder == "h264_nvenc") { presetSpeed = "p7"; qualityParam = "-cq 14 -rc constqp"; }
-                        else if (activeEncoder == "h264_amf") { presetSpeed = "quality"; qualityParam = "-rc cqp -qp_i 14 -qp_p 14"; }
-                        else { presetSpeed = "faster"; qualityParam = "-crf 14"; }
-                    }
-                    // --- BURAYA SADECE BU DENGELİ KOŞULUNU EKLEYECEKTİK ---
-                    else if (preset.Contains("Dengeli"))
-                    {
-                        if (activeEncoder == "h264_nvenc") { presetSpeed = "p6"; qualityParam = "-cq 20 -rc constqp"; }
-                        else if (activeEncoder == "h264_amf") { presetSpeed = "balanced"; qualityParam = "-rc cqp -qp_i 20 -qp_p 20"; }
-                        else { presetSpeed = "faster"; qualityParam = "-crf 20"; }
-                    }
-                    // -------------------------------------------------------
-                    else if (preset.Contains("60 FPS") || preset.Contains("30 FPS"))
-                    {
-                        if (activeEncoder == "h264_nvenc") { presetSpeed = "p6"; qualityParam = "-cq 18 -rc constqp"; }
-                        else if (activeEncoder == "h264_amf") { presetSpeed = "balanced"; qualityParam = "-rc cqp -qp_i 18 -qp_p 18"; }
-                        else { presetSpeed = "faster"; qualityParam = "-crf 18"; }
+                        qualityParam = $"-crf {crfValue}";
                     }
 
                     string activeFilter = finalFilter;
@@ -2156,74 +2240,69 @@ namespace VideoOptimizerV2
         {
             try
             {
-                string[] txtFiles = Directory.GetFiles(syncFolderPath, "*.txt");
+                // Doğrudan hedef txt dosyasının tam yolunu birleştiriyoruz
+                string taskFile = Path.Combine(syncFolderPath, "convert_listesi.txt");
 
-                if (txtFiles.Length > 0)
+                // ŞURAYA BAKALIM: Dosya gerçekten var mı ve okunabiliyor mu?
+                if (File.Exists(taskFile))
                 {
-                    string taskFile = txtFiles[0];
-                    bool hasNewTasks = false;
-
                     string[] lines = File.ReadAllLines(taskFile, System.Text.Encoding.UTF8);
 
-                    SafeInvoke(() => {
-                        foreach (string line in lines)
-                        {
-                            string filePath = line.Trim().Trim('"', '\'').Trim();
-
-                            if (!string.IsNullOrEmpty(filePath) && File.Exists(filePath))
+                    if (lines.Length > 0)
+                    {
+                        bool hasNewTasks = false;
+                        SafeInvoke(() => {
+                            foreach (string line in lines)
                             {
-                                if (!IsFileReady(filePath)) continue;
+                                string filePath = line.Trim().Replace("\"", "").Replace("'", "").Trim();
 
-                                bool alreadyExists = queueList.Any(x => x.FilePath.Equals(filePath, StringComparison.OrdinalIgnoreCase));
-
-                                if (!alreadyExists)
+                                if (!string.IsNullOrEmpty(filePath) && File.Exists(filePath))
                                 {
-                                    var itemData = new QueueItemData
-                                    {
-                                        FilePath = filePath,
-                                        FileName = Path.GetFileName(filePath),
-                                        Status = "Bekliyor",
-                                        Resolution = "Hesaplanıyor...",
-                                        StartTimeText = "-",
-                                        EndTimeText = "-",
-                                        AudioStreamCount = 0
-                                    };
+                                    bool alreadyExists = queueList.Any(x => x.FilePath.Equals(filePath, StringComparison.OrdinalIgnoreCase));
 
-                                    try
+                                    if (!alreadyExists)
                                     {
-                                        string ffmpegPath = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "ffmpeg.exe");
-                                        if (File.Exists(ffmpegPath))
+                                        var itemData = new QueueItemData
                                         {
-                                            itemData.AudioStreamCount = GetAudioStreamCount(ffmpegPath, filePath);
-                                        }
-                                    }
-                                    catch { }
+                                            FilePath = filePath,
+                                            FileName = Path.GetFileName(filePath),
+                                            Status = "Bekliyor",
+                                            Resolution = "Hesaplanıyor...",
+                                            StartTimeText = "-",
+                                            EndTimeText = "-",
+                                            AudioStreamCount = 0
+                                        };
 
-                                    queueList.Add(itemData);
-                                    hasNewTasks = true;
+                                        queueList.Add(itemData);
+                                        hasNewTasks = true;
+                                    }
                                 }
                             }
+
+                            if (hasNewTasks)
+                            {
+                                if (queueList.Count > 0 && lstQueueBox.SelectedIndex == -1)
+                                    lstQueueBox.SelectedIndex = 0;
+                                lstQueueBox.Refresh();
+                            }
+                        });
+
+                        // Okunan txt dosyasının içeriğini temizle ki döngüye girmesin
+                        try { File.WriteAllText(taskFile, string.Empty); } catch { }
+
+                        // Yeni görev geldiyse başlat
+                        if (hasNewTasks && !isRunning)
+                        {
+                            SafeInvoke(() => { BtnStart_Click(null, null); });
                         }
-                        if (hasNewTasks && queueList.Count > 0 && lstQueueBox.SelectedIndex == -1)
-                            lstQueueBox.SelectedIndex = 0;
-                    });
-
-                    try
-                    {
-                        File.WriteAllText(taskFile, string.Empty);
-                    }
-                    catch
-                    {
-                        try { File.Delete(taskFile); } catch { }
-                    }
-
-                    if (hasNewTasks && !isRunning)
-                    {
-                        BtnStart_Click(null, null);
                     }
                 }
             }
-            catch { }
+            catch (Exception ex)
+            {
+                // Hata olursa alt status çubuğuna yazdıralım ki görebilelim
+                UpdateStatus("AutoTimer Hata: " + ex.Message);
+            }
         }
 
         private async void FolderWatchTimer_Tick(object sender, EventArgs e)
@@ -2439,5 +2518,7 @@ namespace VideoOptimizerV2
 
         public string TrimStart { get; set; } = "";
         public string TrimEnd { get; set; } = "";
+
+        public string ActiveCrf { get; set; } = "18"; // Varsayılan değer
     }
 }
