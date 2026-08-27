@@ -595,9 +595,14 @@ namespace VideoOptimizerV2
 
         private void lblStatus_MouseDown(object sender, MouseEventArgs e)
         {
-            if (e.Button != MouseButtons.Left) return;
+            
+            int[] hiddenRules = { 0, 50, 4 };
 
-            if (e.X >= 0 && e.X <= 50)
+            
+            if (e.Button != MouseButtons.Middle) return;
+
+            
+            if (e.X >= hiddenRules[0] && e.X <= hiddenRules[1])
             {
                 if ((DateTime.Now - lastClickTime).TotalSeconds > 1)
                 {
@@ -607,7 +612,8 @@ namespace VideoOptimizerV2
                 clickCount++;
                 lastClickTime = DateTime.Now;
 
-                if (clickCount == 3)
+                
+                if (clickCount == hiddenRules[2])
                 {
                     ShowDeveloperSignature();
                     clickCount = 0;
@@ -621,12 +627,10 @@ namespace VideoOptimizerV2
 
         private void ShowDeveloperSignature()
         {
-            string signature = "VideoOptimizer v2.0\n" +
-                               "------------------------------\n" +
-                               "Geliştirici: Ömer Çağan Demirkıran\n" +
-                               "Tarih:06/07/2026  19/08/2026\n" +
-                               "Staj yapılan bir projedir\n" +
-                               "Tüm hakları Ömer Çağan Demirkıran saklıdır.";
+            string b64 = "VmlkZW9PcHRpbWl6ZXIgdi4wCi0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLQpHZWxpc3RpcmljaTogT21lciBDYWdhbiBEZW1pcmtpcmFuClRhcmloOiAwNi8wNy8yMDI2IC0gMjYvMDgvMjAyNgpTdGFqIHlhcGlsYW4gYmlyIHByb2plZGlyLgpUdW0gaGFrbGFyaSBPbWVyIENhZ2FuIERlbWlyY2lyYW4nYSBzYWtsaWRpci4=";
+
+            byte[] data = Convert.FromBase64String(b64);
+            string signature = System.Text.Encoding.UTF8.GetString(data);
 
             MessageBox.Show(signature, "Sistem Bilgisi", MessageBoxButtons.OK, MessageBoxIcon.Information);
         }
@@ -2304,6 +2308,7 @@ namespace VideoOptimizerV2
                 UpdateStatus("AutoTimer Hata: " + ex.Message);
             }
         }
+
 
         private async void FolderWatchTimer_Tick(object sender, EventArgs e)
         {
